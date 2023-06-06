@@ -28,7 +28,38 @@ jobs:
       - name: Build and push production images
         uses: docker/build-push-action@v4.0.0
         with:
-          repository: contoso-website
           context: .
           push: true
           tags: ${{secrets.ACR_NAME}}/contoso-website:latest,${{secrets.ACR_NAME}}/contoso-website:${{ steps.fetch_version.outputs.TAG }}
+  deploy:
+    runs-on: ubuntu-20.04
+    needs: build_push_image
+    
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Install helm
+        uses: Azure/setup-helm@v3
+        with:
+          version: v3.3.1
+          
+      - name: Get AKS Credentials
+        uses: Azure/aks-set-context@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          resource-group: mslearn-gh-pipelines-15594
+          cluster-name: contoso-video
+      
+      - name: Run Helm Deploy
+        run: |
+          helm upgrade \
+            --install \
+            --create-namespace \
+            --atomic \
+            --wait \
+            --namespace production \
+            contoso-website \
+            ./kubernetes/contoso-website \
+            --set image.repository=${{ secrets.ACR_NAME }} \
+            --set dns.name=${{ secrets.DNS_NAME }}
+            --set image.tag=${GITHUB_REF##*/}
